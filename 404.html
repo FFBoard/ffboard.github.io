@@ -3,18 +3,35 @@
 <head>
     <meta charset="utf-8">
     <title>Easy Innovation</title>
+    <base href="/">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="/assets/easy-innovation-icon.png" />
+
+    <!-- Global site tag (gtag.js) - Google Analytics -->
     <script>
-        // Store the URL the user was trying to access when receiving the 404.
-        sessionStorage.redirect = location.href;
+        window.dataLayer = window.dataLayer || [];
+
+        function gtag() {
+            dataLayer.push(arguments);
+        }
+
+        gtag("consent", "default", {
+            ad_storage: "denied",
+            analytics_storage: "denied",
+        });
     </script>
-    <!-- Immediately redirect to the base URL so we can use the SPA routing. -->
-    <meta http-equiv="refresh" content="0;URL='/'"/>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-M4M6CKFV5R"></script>
+    <script>
+        gtag('js', new Date());
+        gtag('config', 'G-M4M6CKFV5R');
+    </script>
+
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=nunito:400&display=swap" rel="stylesheet" />
 </head>
-<body>
-<!-- IE required at least 512 bytes of data to show non-default 404. -->
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<body class="bg-light">
+<app-wrapper></app-wrapper>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
 </body>
 </html>
