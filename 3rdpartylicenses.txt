@@ -178,6 +178,9 @@ MIT
 @ngx-loading-bar/http-client
 MIT
 
+@ngx-translate/core
+MIT
+
 @popperjs/core
 MIT
 The MIT License (MIT)
