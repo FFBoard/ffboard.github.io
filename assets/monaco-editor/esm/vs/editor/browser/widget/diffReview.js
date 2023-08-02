@@ -20,30 +20,27 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var _a;
-import './media/diffReview.css';
-import * as nls from '../../../nls.js';
 import * as dom from '../../../base/browser/dom.js';
 import { createFastDomNode } from '../../../base/browser/fastDomNode.js';
+import { createTrustedTypesPolicy } from '../../../base/browser/trustedTypes.js';
 import { ActionBar } from '../../../base/browser/ui/actionbar/actionbar.js';
 import { DomScrollableElement } from '../../../base/browser/ui/scrollbar/scrollableElement.js';
 import { Action } from '../../../base/common/actions.js';
+import { Codicon } from '../../../base/common/codicons.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
+import { ThemeIcon } from '../../../base/common/themables.js';
+import './media/diffReview.css';
 import { applyFontInfo } from '../config/domFontInfo.js';
-import { EditorAction, registerEditorAction } from '../editorExtensions.js';
-import { ICodeEditorService } from '../services/codeEditorService.js';
 import { EditorFontLigatures } from '../../common/config/editorOptions.js';
-import { LineTokens } from '../../common/tokens/lineTokens.js';
 import { Position } from '../../common/core/position.js';
-import { editorLineNumbers } from '../../common/core/editorColorRegistry.js';
+import { ILanguageService } from '../../common/languages/language.js';
+import { LineTokens } from '../../common/tokens/lineTokens.js';
 import { RenderLineInput, renderViewLine2 as renderViewLine } from '../../common/viewLayout/viewLineRenderer.js';
 import { ViewLineRenderingData } from '../../common/viewModel.js';
-import { ContextKeyExpr } from '../../../platform/contextkey/common/contextkey.js';
-import { scrollbarShadow } from '../../../platform/theme/common/colorRegistry.js';
-import { registerThemingParticipant, ThemeIcon } from '../../../platform/theme/common/themeService.js';
-import { Codicon } from '../../../base/common/codicons.js';
+import * as nls from '../../../nls.js';
+import { AudioCue, IAudioCueService } from '../../../platform/audioCues/browser/audioCueService.js';
+import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
 import { registerIcon } from '../../../platform/theme/common/iconRegistry.js';
-import { ILanguageService } from '../../common/languages/language.js';
 const DIFF_LINES_PADDING = 3;
 class DiffEntry {
     constructor(originalLineStart, originalLineEnd, modifiedLineStart, modifiedLineEnd) {
@@ -54,12 +51,12 @@ class DiffEntry {
     }
     getType() {
         if (this.originalLineStart === 0) {
-            return 1 /* Insert */;
+            return 1 /* DiffEntryType.Insert */;
         }
         if (this.modifiedLineStart === 0) {
-            return 2 /* Delete */;
+            return 2 /* DiffEntryType.Delete */;
         }
-        return 0 /* Equal */;
+        return 0 /* DiffEntryType.Equal */;
     }
 }
 class Diff {
@@ -70,10 +67,12 @@ class Diff {
 const diffReviewInsertIcon = registerIcon('diff-review-insert', Codicon.add, nls.localize('diffReviewInsertIcon', 'Icon for \'Insert\' in diff review.'));
 const diffReviewRemoveIcon = registerIcon('diff-review-remove', Codicon.remove, nls.localize('diffReviewRemoveIcon', 'Icon for \'Remove\' in diff review.'));
 const diffReviewCloseIcon = registerIcon('diff-review-close', Codicon.close, nls.localize('diffReviewCloseIcon', 'Icon for \'Close\' in diff review.'));
-let DiffReview = class DiffReview extends Disposable {
-    constructor(diffEditor, _languageService) {
+export let DiffReview = class DiffReview extends Disposable {
+    constructor(diffEditor, _languageService, _audioCueService, _configurationService) {
         super();
         this._languageService = _languageService;
+        this._audioCueService = _audioCueService;
+        this._configurationService = _configurationService;
         this._width = 0;
         this._diffEditor = diffEditor;
         this._isVisible = false;
@@ -111,29 +110,31 @@ let DiffReview = class DiffReview extends Disposable {
             }
         }));
         this._register(dom.addStandardDisposableListener(this.domNode.domNode, 'keydown', (e) => {
-            if (e.equals(18 /* DownArrow */)
-                || e.equals(2048 /* CtrlCmd */ | 18 /* DownArrow */)
-                || e.equals(512 /* Alt */ | 18 /* DownArrow */)) {
+            if (e.equals(18 /* KeyCode.DownArrow */)
+                || e.equals(2048 /* KeyMod.CtrlCmd */ | 18 /* KeyCode.DownArrow */)
+                || e.equals(512 /* KeyMod.Alt */ | 18 /* KeyCode.DownArrow */)) {
                 e.preventDefault();
-                this._goToRow(this._getNextRow());
+                this._goToRow(this._getNextRow(), 'next');
             }
-            if (e.equals(16 /* UpArrow */)
-                || e.equals(2048 /* CtrlCmd */ | 16 /* UpArrow */)
-                || e.equals(512 /* Alt */ | 16 /* UpArrow */)) {
+            if (e.equals(16 /* KeyCode.UpArrow */)
+                || e.equals(2048 /* KeyMod.CtrlCmd */ | 16 /* KeyCode.UpArrow */)
+                || e.equals(512 /* KeyMod.Alt */ | 16 /* KeyCode.UpArrow */)) {
                 e.preventDefault();
-                this._goToRow(this._getPrevRow());
+                this._goToRow(this._getPrevRow(), 'previous');
             }
-            if (e.equals(9 /* Escape */)
-                || e.equals(2048 /* CtrlCmd */ | 9 /* Escape */)
-                || e.equals(512 /* Alt */ | 9 /* Escape */)
-                || e.equals(1024 /* Shift */ | 9 /* Escape */)) {
-                e.preventDefault();
-                this.hide();
-            }
-            if (e.equals(10 /* Space */)
-                || e.equals(3 /* Enter */)) {
+            if (e.equals(9 /* KeyCode.Escape */)
+                || e.equals(2048 /* KeyMod.CtrlCmd */ | 9 /* KeyCode.Escape */)
+                || e.equals(512 /* KeyMod.Alt */ | 9 /* KeyCode.Escape */)
+                || e.equals(1024 /* KeyMod.Shift */ | 9 /* KeyCode.Escape */)
+                || e.equals(10 /* KeyCode.Space */)
+                || e.equals(3 /* KeyCode.Enter */)) {
                 e.preventDefault();
                 this.accept();
+            }
+        }));
+        this._register(this._configurationService.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('accessibility.verbosity.diffEditor')) {
+                this._diffEditor.updateOptions({ accessibilityVerbose: this._configurationService.getValue('accessibility.verbosity.diffEditor') });
             }
         }));
         this._diffs = [];
@@ -164,11 +165,11 @@ let DiffReview = class DiffReview extends Disposable {
         index = index % this._diffs.length;
         const entries = this._diffs[index].entries;
         this._diffEditor.setPosition(new Position(entries[0].modifiedLineStart, 1));
-        this._diffEditor.setSelection({ startColumn: 1, startLineNumber: entries[0].modifiedLineStart, endColumn: 1073741824 /* MAX_SAFE_SMALL_INTEGER */, endLineNumber: entries[entries.length - 1].modifiedLineEnd });
+        this._diffEditor.setSelection({ startColumn: 1, startLineNumber: entries[0].modifiedLineStart, endColumn: 1073741824 /* Constants.MAX_SAFE_SMALL_INTEGER */, endLineNumber: entries[entries.length - 1].modifiedLineEnd });
         this._isVisible = true;
         this._diffEditor.doLayout();
         this._render();
-        this._goToRow(this._getNextRow());
+        this._goToRow(this._getPrevRow(), 'previous');
     }
     next() {
         let index = 0;
@@ -195,11 +196,11 @@ let DiffReview = class DiffReview extends Disposable {
         index = index % this._diffs.length;
         const entries = this._diffs[index].entries;
         this._diffEditor.setPosition(new Position(entries[0].modifiedLineStart, 1));
-        this._diffEditor.setSelection({ startColumn: 1, startLineNumber: entries[0].modifiedLineStart, endColumn: 1073741824 /* MAX_SAFE_SMALL_INTEGER */, endLineNumber: entries[entries.length - 1].modifiedLineEnd });
+        this._diffEditor.setSelection({ startColumn: 1, startLineNumber: entries[0].modifiedLineStart, endColumn: 1073741824 /* Constants.MAX_SAFE_SMALL_INTEGER */, endLineNumber: entries[entries.length - 1].modifiedLineEnd });
         this._isVisible = true;
         this._diffEditor.doLayout();
         this._render();
-        this._goToRow(this._getNextRow());
+        this._goToRow(this._getNextRow(), 'next');
     }
     accept() {
         let jumpToLineNumber = -1;
@@ -213,7 +214,7 @@ let DiffReview = class DiffReview extends Disposable {
         this.hide();
         if (jumpToLineNumber !== -1) {
             this._diffEditor.setPosition(new Position(jumpToLineNumber, 1));
-            this._diffEditor.revealPosition(new Position(jumpToLineNumber, 1), 1 /* Immediate */);
+            this._diffEditor.revealPosition(new Position(jumpToLineNumber, 1), 1 /* ScrollType.Immediate */);
         }
     }
     hide() {
@@ -253,12 +254,19 @@ let DiffReview = class DiffReview extends Disposable {
         }
         return null;
     }
-    _goToRow(row) {
-        const prev = this._getCurrentFocusedRow();
+    _goToRow(row, type) {
+        const current = this._getCurrentFocusedRow();
         row.tabIndex = 0;
         row.focus();
-        if (prev && prev !== row) {
-            prev.tabIndex = -1;
+        if (current && current !== row) {
+            current.tabIndex = -1;
+        }
+        const element = !type ? current : type === 'next' ? current === null || current === void 0 ? void 0 : current.nextElementSibling : current === null || current === void 0 ? void 0 : current.previousElementSibling;
+        if (element === null || element === void 0 ? void 0 : element.classList.contains("line-insert" /* DiffEditorLineClasses.Insert */)) {
+            this._audioCueService.playAudioCue(AudioCue.diffLineInserted, true);
+        }
+        else if (element === null || element === void 0 ? void 0 : element.classList.contains("line-delete" /* DiffEditorLineClasses.Delete */)) {
+            this._audioCueService.playAudioCue(AudioCue.diffLineDeleted, true);
         }
         this.scrollbar.scanDomNode();
     }
@@ -404,8 +412,8 @@ let DiffReview = class DiffReview extends Disposable {
             const thisDiff = diffs[i].entries;
             const currLast = curr[curr.length - 1];
             const thisFirst = thisDiff[0];
-            if (currLast.getType() === 0 /* Equal */
-                && thisFirst.getType() === 0 /* Equal */
+            if (currLast.getType() === 0 /* DiffEntryType.Equal */
+                && thisFirst.getType() === 0 /* DiffEntryType.Equal */
                 && thisFirst.originalLineStart <= currLast.originalLineEnd) {
                 // We are dealing with equal lines that overlap
                 curr[curr.length - 1] = new DiffEntry(currLast.originalLineStart, thisFirst.originalLineEnd, currLast.modifiedLineStart, thisFirst.modifiedLineEnd);
@@ -453,7 +461,7 @@ let DiffReview = class DiffReview extends Disposable {
         container.className = 'diff-review-table';
         container.setAttribute('role', 'list');
         container.setAttribute('aria-label', 'Difference review. Use "Stage | Unstage | Revert Selected Ranges" commands');
-        applyFontInfo(container, modifiedOptions.get(44 /* fontInfo */));
+        applyFontInfo(container, modifiedOptions.get(48 /* EditorOption.fontInfo */));
         let minOriginalLine = 0;
         let maxOriginalLine = 0;
         let minModifiedLine = 0;
@@ -513,7 +521,7 @@ let DiffReview = class DiffReview extends Disposable {
         // @@ -504,7 +517,7 @@
         header.setAttribute('role', 'listitem');
         container.appendChild(header);
-        const lineHeight = modifiedOptions.get(59 /* lineHeight */);
+        const lineHeight = modifiedOptions.get(64 /* EditorOption.lineHeight */);
         let modLine = minModifiedLine;
         for (let i = 0, len = diffs.length; i < len; i++) {
             const diffEntry = diffs[i];
@@ -533,12 +541,12 @@ let DiffReview = class DiffReview extends Disposable {
         const spacerClassName = 'diff-review-spacer';
         let spacerIcon = null;
         switch (type) {
-            case 1 /* Insert */:
+            case 1 /* DiffEntryType.Insert */:
                 rowClassName = 'diff-review-row line-insert';
                 lineNumbersExtraClassName = ' char-insert';
                 spacerIcon = diffReviewInsertIcon;
                 break;
-            case 2 /* Delete */:
+            case 2 /* DiffEntryType.Delete */:
                 rowClassName = 'diff-review-row line-delete';
                 lineNumbersExtraClassName = ' char-delete';
                 spacerIcon = diffReviewRemoveIcon;
@@ -549,9 +557,9 @@ let DiffReview = class DiffReview extends Disposable {
         const modifiedLineStart = diffEntry.modifiedLineStart;
         const modifiedLineEnd = diffEntry.modifiedLineEnd;
         const cnt = Math.max(modifiedLineEnd - modifiedLineStart, originalLineEnd - originalLineStart);
-        const originalLayoutInfo = originalOptions.get(131 /* layoutInfo */);
+        const originalLayoutInfo = originalOptions.get(141 /* EditorOption.layoutInfo */);
         const originalLineNumbersWidth = originalLayoutInfo.glyphMarginWidth + originalLayoutInfo.lineNumbersWidth;
-        const modifiedLayoutInfo = modifiedOptions.get(131 /* layoutInfo */);
+        const modifiedLayoutInfo = modifiedOptions.get(141 /* EditorOption.layoutInfo */);
         const modifiedLineNumbersWidth = 10 + modifiedLayoutInfo.glyphMarginWidth + modifiedLayoutInfo.lineNumbersWidth;
         for (let i = 0; i <= cnt; i++) {
             const originalLine = (originalLineStart === 0 ? 0 : originalLineStart + i);
@@ -625,7 +633,7 @@ let DiffReview = class DiffReview extends Disposable {
             }
             let ariaLabel = '';
             switch (type) {
-                case 0 /* Equal */:
+                case 0 /* DiffEntryType.Equal */:
                     if (originalLine === modifiedLine) {
                         ariaLabel = nls.localize({ key: 'unchangedLine', comment: ['The placeholders are contents of the line and should not be translated.'] }, "{0} unchanged line {1}", lineContent, originalLine);
                     }
@@ -633,10 +641,10 @@ let DiffReview = class DiffReview extends Disposable {
                         ariaLabel = nls.localize('equalLine', "{0} original line {1} modified line {2}", lineContent, originalLine, modifiedLine);
                     }
                     break;
-                case 1 /* Insert */:
+                case 1 /* DiffEntryType.Insert */:
                     ariaLabel = nls.localize('insertLine', "+ {0} modified line {1}", lineContent, modifiedLine);
                     break;
-                case 2 /* Delete */:
+                case 2 /* DiffEntryType.Delete */:
                     ariaLabel = nls.localize('deleteLine', "- {0} original line {1}", lineContent, originalLine);
                     break;
             }
@@ -646,86 +654,18 @@ let DiffReview = class DiffReview extends Disposable {
     }
     static _renderLine(model, options, tabSize, lineNumber, languageIdCodec) {
         const lineContent = model.getLineContent(lineNumber);
-        const fontInfo = options.get(44 /* fontInfo */);
+        const fontInfo = options.get(48 /* EditorOption.fontInfo */);
         const lineTokens = LineTokens.createEmpty(lineContent, languageIdCodec);
         const isBasicASCII = ViewLineRenderingData.isBasicASCII(lineContent, model.mightContainNonBasicASCII());
         const containsRTL = ViewLineRenderingData.containsRTL(lineContent, isBasicASCII, model.mightContainRTL());
-        const r = renderViewLine(new RenderLineInput((fontInfo.isMonospace && !options.get(29 /* disableMonospaceOptimizations */)), fontInfo.canUseHalfwidthRightwardsArrow, lineContent, false, isBasicASCII, containsRTL, 0, lineTokens, [], tabSize, 0, fontInfo.spaceWidth, fontInfo.middotWidth, fontInfo.wsmiddotWidth, options.get(105 /* stopRenderingLineAfter */), options.get(88 /* renderWhitespace */), options.get(83 /* renderControlCharacters */), options.get(45 /* fontLigatures */) !== EditorFontLigatures.OFF, null));
+        const r = renderViewLine(new RenderLineInput((fontInfo.isMonospace && !options.get(31 /* EditorOption.disableMonospaceOptimizations */)), fontInfo.canUseHalfwidthRightwardsArrow, lineContent, false, isBasicASCII, containsRTL, 0, lineTokens, [], tabSize, 0, fontInfo.spaceWidth, fontInfo.middotWidth, fontInfo.wsmiddotWidth, options.get(114 /* EditorOption.stopRenderingLineAfter */), options.get(96 /* EditorOption.renderWhitespace */), options.get(91 /* EditorOption.renderControlCharacters */), options.get(49 /* EditorOption.fontLigatures */) !== EditorFontLigatures.OFF, null));
         return r.html;
     }
 };
-DiffReview._ttPolicy = (_a = window.trustedTypes) === null || _a === void 0 ? void 0 : _a.createPolicy('diffReview', { createHTML: value => value });
+DiffReview._ttPolicy = createTrustedTypesPolicy('diffReview', { createHTML: value => value });
 DiffReview = __decorate([
-    __param(1, ILanguageService)
+    __param(1, ILanguageService),
+    __param(2, IAudioCueService),
+    __param(3, IConfigurationService)
 ], DiffReview);
-export { DiffReview };
 // theming
-registerThemingParticipant((theme, collector) => {
-    const lineNumbers = theme.getColor(editorLineNumbers);
-    if (lineNumbers) {
-        collector.addRule(`.monaco-diff-editor .diff-review-line-number { color: ${lineNumbers}; }`);
-    }
-    const shadow = theme.getColor(scrollbarShadow);
-    if (shadow) {
-        collector.addRule(`.monaco-diff-editor .diff-review-shadow { box-shadow: ${shadow} 0 -6px 6px -6px inset; }`);
-    }
-});
-class DiffReviewNext extends EditorAction {
-    constructor() {
-        super({
-            id: 'editor.action.diffReview.next',
-            label: nls.localize('editor.action.diffReview.next', "Go to Next Difference"),
-            alias: 'Go to Next Difference',
-            precondition: ContextKeyExpr.has('isInDiffEditor'),
-            kbOpts: {
-                kbExpr: null,
-                primary: 65 /* F7 */,
-                weight: 100 /* EditorContrib */
-            }
-        });
-    }
-    run(accessor, editor) {
-        const diffEditor = findFocusedDiffEditor(accessor);
-        if (diffEditor) {
-            diffEditor.diffReviewNext();
-        }
-    }
-}
-class DiffReviewPrev extends EditorAction {
-    constructor() {
-        super({
-            id: 'editor.action.diffReview.prev',
-            label: nls.localize('editor.action.diffReview.prev', "Go to Previous Difference"),
-            alias: 'Go to Previous Difference',
-            precondition: ContextKeyExpr.has('isInDiffEditor'),
-            kbOpts: {
-                kbExpr: null,
-                primary: 1024 /* Shift */ | 65 /* F7 */,
-                weight: 100 /* EditorContrib */
-            }
-        });
-    }
-    run(accessor, editor) {
-        const diffEditor = findFocusedDiffEditor(accessor);
-        if (diffEditor) {
-            diffEditor.diffReviewPrev();
-        }
-    }
-}
-function findFocusedDiffEditor(accessor) {
-    const codeEditorService = accessor.get(ICodeEditorService);
-    const diffEditors = codeEditorService.listDiffEditors();
-    const activeCodeEditor = codeEditorService.getActiveCodeEditor();
-    if (!activeCodeEditor) {
-        return null;
-    }
-    for (let i = 0, len = diffEditors.length; i < len; i++) {
-        const diffEditor = diffEditors[i];
-        if (diffEditor.getModifiedEditor().getId() === activeCodeEditor.getId() || diffEditor.getOriginalEditor().getId() === activeCodeEditor.getId()) {
-            return diffEditor;
-        }
-    }
-    return null;
-}
-registerEditorAction(DiffReviewNext);
-registerEditorAction(DiffReviewPrev);

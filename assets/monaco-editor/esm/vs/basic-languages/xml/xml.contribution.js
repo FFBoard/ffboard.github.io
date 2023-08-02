@@ -1,6 +1,6 @@
 /*!-----------------------------------------------------------------------------
  * Copyright (c) Microsoft Corporation. All rights reserved.
- * Version: 0.33.0(4b1abad427e58dbedc1215d99a0902ffc885fcd4)
+ * Version: 0.40.0(83b3cf23ca80c94cccca7c5b3e48351b220f8e35)
  * Released under the MIT license
  * https://github.com/microsoft/monaco-editor/blob/main/LICENSE.txt
  *-----------------------------------------------------------------------------*/
@@ -11,10 +11,13 @@ registerLanguage({
   id: "xml",
   extensions: [
     ".xml",
+    ".xsd",
     ".dtd",
     ".ascx",
     ".csproj",
     ".config",
+    ".props",
+    ".targets",
     ".wxi",
     ".wxl",
     ".wxs",
@@ -22,6 +25,7 @@ registerLanguage({
     ".svg",
     ".svgz",
     ".opf",
+    ".xslt",
     ".xsl"
   ],
   firstLine: "(\\<\\?xml.*)|(\\<svg)|(\\<\\!doctype\\s+svg)",
